@@ -1,0 +1,57 @@
+version: "3.9"
+
+services:
+  datadog:
+    image: gcr.io/datadoghq/agent:7
+    container_name: datadog
+    environment:
+      - DD_API_KEY=${DD_API_KEY}
+      - DD_SITE=us5.datadoghq.com
+      - DD_ENV=local
+      - DD_DOGSTATSD_NON_LOCAL_TRAFFIC=true
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /proc/:/host/proc/:ro
+      - /sys/fs/cgroup:/host/sys/fs/cgroup:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+
+  minio:
+    image: minio/minio
+    container_name: minio
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: "minio"
+      MINIO_ROOT_PASSWORD: "minio123"
+    volumes:
+      - minio_data:/data
+
+  transcriber:
+    build: ./transcriber
+    container_name: transcriber
+    ports:
+      - "8001:8001"
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+    depends_on:
+      - analyzer
+
+  analyzer:
+    build: ./analyzer
+    container_name: analyzer
+    ports:
+      - "8002:8002"
+
+  orchestrator:
+    build: ./orchestrator
+    container_name: orchestrator
+    ports:
+      - "8000:8000"
+    depends_on:
+      - transcriber
+      - analyzer
+
+volumes:
+  minio_data:
