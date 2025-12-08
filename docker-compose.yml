@@ -41,6 +41,12 @@ services:
   analyzer:
     build: ./analyzer
     container_name: analyzer
+    environment:
+      MONGO_URI: ${MONGO_URI}
+      MONGO_DB: ${MONGO_DB}
+    depends_on:
+    - rabbitmq
+    - minio
     ports:
       - "8002:8002"
 
