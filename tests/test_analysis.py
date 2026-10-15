@@ -81,3 +81,32 @@ def test_normalize_result_cleans_values():
         "valence": "positive",
         "explanation": "",
     }
+
+
+def _openai_client_answering(answer):
+    from analyzer.llm import OpenAIClient
+
+    client = OpenAIClient.__new__(OpenAIClient)  # skip __init__: no API key or network
+    client._ask_json = answer
+    return client
+
+
+def test_llm_reply_without_patient_key_falls_back_to_most_words():
+    client = _openai_client_answering(lambda prompt: {"Patient": "B"})
+    result = analyze_utterances(UTTERANCES, client_with_sentences(client), cache())
+    assert result["patient_speaker"] == "B"
+
+
+def test_llm_reply_that_is_not_json_falls_back_to_most_words():
+    import json
+
+    def not_json(prompt):
+        raise json.JSONDecodeError("bad", "doc", 0)
+
+    client = _openai_client_answering(not_json)
+    assert client.identify_patient(UTTERANCES) == ""
+
+
+def client_with_sentences(client):
+    client.analyze_sentence = ScriptedLLM().analyze_sentence
+    return client

@@ -55,8 +55,13 @@ class OpenAIClient:
         return json.loads(response.choices[0].message.content)
 
     def identify_patient(self, utterances: list[dict]) -> str:
+        """Returns "" when the model's answer is unusable; the caller then falls back."""
         transcript = "\n".join(f'{u["speaker"]}: {u["text"]}' for u in utterances)
-        return str(self._ask_json(SPEAKER_PROMPT.replace("{{TRANSCRIPT}}", transcript))["patient"])
+        try:
+            answer = self._ask_json(SPEAKER_PROMPT.replace("{{TRANSCRIPT}}", transcript))
+        except json.JSONDecodeError:
+            return ""
+        return str(answer.get("patient") or "") if isinstance(answer, dict) else ""
 
     def analyze_sentence(self, text: str) -> dict:
         return self._ask_json(SENTENCE_PROMPT.replace("{{TEXT}}", text))

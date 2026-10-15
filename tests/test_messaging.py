@@ -116,6 +116,8 @@ def test_topology_wires_retry_and_dead_letter_queues():
     declare_topology(channel)
     assert channel.exchanges == {EXCHANGE: "topic", DEAD_LETTER_EXCHANGE: "direct"}
     assert channel.queues["audio_extraction"] == {
+        "x-queue-type": "quorum",
+        "x-delivery-limit": 5,
         "x-dead-letter-exchange": DEAD_LETTER_EXCHANGE,
         "x-dead-letter-routing-key": "audio_extraction",
     }

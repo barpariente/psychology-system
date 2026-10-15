@@ -14,6 +14,9 @@ EXCHANGE = "sessions"
 DEAD_LETTER_EXCHANGE = "sessions.dlx"
 RETRY_HEADER = "x-retry-count"
 RETRY_DELAY_MS = 5000
+# Quorum queues count redeliveries, so a message that crashes the worker every time
+# still reaches the DLQ instead of looping forever.
+DELIVERY_LIMIT = 5
 
 EVENT_UPLOADED = "session.uploaded"
 EVENT_AUDIO_EXTRACTED = "session.audio_extracted"
@@ -53,6 +56,8 @@ def declare_topology(channel) -> None:
     channel.exchange_declare(exchange=DEAD_LETTER_EXCHANGE, exchange_type="direct", durable=True)
     for queue, routing_key in QUEUE_BINDINGS.items():
         channel.queue_declare(queue=queue, durable=True, arguments={
+            "x-queue-type": "quorum",
+            "x-delivery-limit": DELIVERY_LIMIT,
             "x-dead-letter-exchange": DEAD_LETTER_EXCHANGE,
             "x-dead-letter-routing-key": queue,
         })
