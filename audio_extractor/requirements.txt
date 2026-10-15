@@ -1,6 +1,0 @@
-fastapi
-uvicorn
-pika
-minio
-python-multipart
-aiofiles
