@@ -1,0 +1,100 @@
+x-app-env: &app-env
+  # heartbeat=600 keeps long transcriptions from dropping the RabbitMQ connection
+  RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/%2F?heartbeat=600
+  MONGO_URI: mongodb://mongo:27017
+  MONGO_DB: psychology_system
+  MINIO_ENDPOINT: minio:9000
+  MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minio}
+  MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minio123}
+  REDIS_URL: redis://redis:6379/0
+  FAKE_AI: ${FAKE_AI:-true}
+  MAX_RETRIES: "3"
+  OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+  ASSEMBLYAI_API_KEY: ${ASSEMBLYAI_API_KEY:-}
+
+x-infra: &infra
+  rabbitmq:
+    condition: service_healthy
+  mongo:
+    condition: service_healthy
+  minio:
+    condition: service_healthy
+
+services:
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    ports: ["5672:5672", "15672:15672"]
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 10s
+      retries: 30
+
+  mongo:
+    image: mongo:7
+    ports: ["27017:27017"]
+    volumes: [mongo_data:/data/db]
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  minio:
+    # Official minio/minio images were pulled from Docker Hub; pgsty/minio is a maintained community build
+    image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z
+    command: server /data --console-address ":9001"
+    ports: ["9000:9000", "9001:9001"]
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-minio}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-minio123}
+    volumes: [minio_data:/data]
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  api:
+    build: {context: ., dockerfile: services/api/Dockerfile}
+    ports: ["8000:8000"]
+    environment: *app-env
+    depends_on: *infra
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  audio_extractor:
+    build: {context: ., dockerfile: services/audio_extractor/Dockerfile}
+    environment: *app-env
+    depends_on: *infra
+    restart: on-failure
+
+  transcriber:
+    build: {context: ., dockerfile: services/transcriber/Dockerfile}
+    environment: *app-env
+    depends_on: *infra
+    restart: on-failure
+
+  analyzer:
+    build: {context: ., dockerfile: services/analyzer/Dockerfile}
+    environment: *app-env
+    depends_on:
+      <<: *infra
+      redis:
+        condition: service_healthy
+    restart: on-failure
+
+volumes:
+  mongo_data:
+  minio_data:
